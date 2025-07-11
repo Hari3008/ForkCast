@@ -151,7 +151,3 @@ Data URL: `https://s3.us-east-2.amazonaws.com/artificium.us/datasets/restaurant-
 - Text fields must use single quotes for Aiven MySQL
 - Use batch inserts for efficient data loading
 - Disconnect from database after operations to free resources
-
-## 🤝 Contributing
-
-This is an academic project. While contributions are not expected, feedback and suggestions are welcome.
