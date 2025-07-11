@@ -5,7 +5,7 @@ library(RMySQL)
 
 # 2. Settings
 db_user <- 'avnadmin'            # use your value from the setup
-db_password <- 'AVNS_s5fw-5CC0zMcdySooAU'    # use your value from the setup
+db_password <- '####'    # use your value from the setup
 db_name <- 'defaultdb'         # use your value from the setup
 
 db_host <- 'mysql-practicum-1-practicum-1-hariharasudan.f.aivencloud.com'
