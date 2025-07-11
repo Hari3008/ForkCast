@@ -1,0 +1,212 @@
+---
+title: "Analyze Sales"
+subtitle: "CS5200 Practicum I"
+author: "Hariharasudan Savithri Anbarasu"
+date: "Full Summer 2025"
+output:
+  pdf_document:
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# Load required libraries
+if (!require("RMySQL")) install.packages("RMySQL")
+if (!require("rmarkdown")) install.packages("rmarkdown")
+if (!require("tinytex")) install.packages("tinytex")
+if (!require("DBI")) install.packages("DBI")
+if (!require("kableExtra")) install.packages("kableExtra")
+if (!require("tidyverse")) install.packages("tidyverse")
+# tinytex::install_tinytex()
+library(RMySQL)
+library(DBI)
+library(kableExtra)
+library(tidyverse)
+```
+
+```{r connect-db, echo=FALSE, include=FALSE}
+# Database connection parameters
+db_user <- "avnadmin"
+db_password <- "AVNS_s5fw-5CC0zMcdySooAU"
+db_host <- "mysql-practicum-1-practicum-1-hariharasudan.f.aivencloud.com"
+db_port <- 28796
+db_name <- "defaultdb"
+
+# DB Connection
+tryCatch({
+  con <- dbConnect(
+    MySQL(),
+    user = db_user,
+    password = db_password,
+    host = db_host,
+    port = db_port,
+    dbname = db_name
+  )
+  cat("Connected to DB\n")
+}, error = function(e) {
+  cat("Error:", e$message, "\n")
+  stop("Program ends since DB connection failed.")
+})
+
+```
+
+## Analysis by Restaurant
+
+```{r restaurant-analysis, echo=FALSE}
+# SQL query for restaurant analysis
+restaurant_query <- "
+  SELECT 
+    r.RestaurantName,
+    COUNT(DISTINCT v.VisitID) as TotalVisits,
+    COUNT(DISTINCT v.CustomerID) as UniqueCustomers,
+    COUNT(DISTINCT CASE WHEN c.LoyaltyMember = 1 THEN v.CustomerID END) as LoyaltyCustomers,
+    ROUND(SUM(v.FoodBill), 2) as FoodRevenue,
+    ROUND(SUM(v.AlcoholBill), 2) as AlcoholRevenue,
+    ROUND(SUM(v.FoodBill + v.AlcoholBill), 2) as TotalRevenue
+  FROM Visits v
+  JOIN Restaurants r ON v.RestaurantID = r.RestaurantID
+  LEFT JOIN Customers c ON v.CustomerID = c.CustomerID
+  GROUP BY r.RestaurantID, r.RestaurantName
+  ORDER BY TotalRevenue DESC
+"
+
+restaurant_data <- dbGetQuery(con, restaurant_query)
+
+# Create formatted table
+restaurant_data %>%
+  kable(
+    col.names = c("Restaurant", "Total Visits", "Unique Customers", 
+                  "Loyalty Members", "Food Revenue", "Alcohol Revenue", "Total Revenue"),
+    format.args = list(big.mark = ","),
+    caption = "Restaurant Performance Summary",
+    linesep = "\\hline",
+    align = c("l", "r", "r", "r", "r", "r", "r")
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(1:8, hline_after = TRUE) %>%
+  column_spec(1, bold = TRUE, width = "80px") %>%
+  column_spec(2:4, width = "60px") %>%
+  column_spec(5:7, color = "#4CAF50", width = "60px") %>%
+  row_spec(0, bold = TRUE, background = "#4CAF50", color = "white")
+```
+\bigskip
+\bigskip
+\bigskip
+\bigskip
+\bigskip
+\bigskip
+\bigskip
+
+## Analysis by Year
+
+```{r year-analysis, echo=FALSE}
+# SQL query for year analysis
+year_query <- "
+  SELECT 
+    YEAR(VisitDate) as Year,
+    ROUND(SUM(FoodBill + AlcoholBill), 2) as TotalRevenue,
+    ROUND(AVG(FoodBill + AlcoholBill), 2) as AvgPerParty,
+    ROUND(AVG(PartySize), 1) as AvgPartySize
+  FROM Visits
+  WHERE VisitDate IS NOT NULL
+  GROUP BY YEAR(VisitDate)
+  ORDER BY Year
+"
+
+year_data <- dbGetQuery(con, year_query)
+
+# Pivot data to have years as columns
+year_pivot <- year_data %>%
+  pivot_longer(cols = -Year, names_to = "Metric", values_to = "Value") %>%
+  pivot_wider(names_from = Year, values_from = Value)
+
+# Clean up metric names
+year_pivot$Metric <- case_when(
+  year_pivot$Metric == "TotalRevenue" ~ "Total Revenue ($)",
+  year_pivot$Metric == "AvgPerParty" ~ "Average Per Party ($)",
+  year_pivot$Metric == "AvgPartySize" ~ "Average Party Size"
+)
+
+# Create formatted table with years as columns
+year_pivot %>%
+  kable(
+    caption = "Yearly Performance Metrics",
+    format.args = list(big.mark = ","),
+    booktabs = FALSE,    
+    linesep = "\\hline",
+    align = c("l", rep("r", ncol(year_pivot) - 1))
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(1:2, hline_after = TRUE) %>%
+  column_spec(1, bold = TRUE, width = "100px") %>%
+  row_spec(0, bold = TRUE, background = "#2196F3", color = "white") %>%
+  row_spec(1, background = "#E8F5E9")
+```
+
+\bigskip
+\bigskip
+## Trend by Year
+
+```{r trend-plot, echo=FALSE, fig.width=10, fig.height=6, fig.align='center'}
+# Using the year_data from previous chunk for plotting
+if (nrow(year_data) > 0) {
+  # Set up the plot with better styling
+  par(mar = c(5, 6, 4, 2) + 0.1)  # Adjust margins
+  
+  # Create the base plot
+  plot(
+    year_data$Year, 
+    year_data$TotalRevenue,
+    type = "b",  # Both points and lines
+    pch = 19,    # Solid circle points
+    col = "darkblue",
+    lwd = 3,     # Line width
+    xlab = "Year",
+    ylab = "Total Revenue ($)",
+    main = "Revenue Trend by Year",
+    cex.main = 1.5,
+    cex.lab = 1.2,
+    cex.axis = 1.1,
+    ylim = c(min(year_data$TotalRevenue) * 0.9, max(year_data$TotalRevenue) * 1.1),
+    xaxt = "n"  # Suppress x-axis to customize it
+  )
+  
+  # Add custom x-axis with all years
+  axis(1, at = year_data$Year, labels = year_data$Year, cex.axis = 1.1)
+  
+  # Add grid lines
+  grid(nx = NA, ny = NULL, col = "lightgray", lty = "dotted")
+  
+  # Add data labels
+  text(
+    year_data$Year, 
+    year_data$TotalRevenue,
+    labels = paste0("$", format(round(year_data$TotalRevenue), big.mark = ",")),
+    pos = 3,  # Position above points
+    cex = 0.9,
+    col = "darkred",
+    font = 2  # Bold
+  )
+  
+  # Add a box around the plot
+  box(lwd = 2)
+  
+} else {
+  plot.new()
+  text(0.5, 0.5, "No yearly data available for plotting", cex = 1.2)
+}
+```
+
+```{r disconnect-db, echo=FALSE, include=FALSE}
+# Disconnect from database
+dbDisconnect(con)
+```
